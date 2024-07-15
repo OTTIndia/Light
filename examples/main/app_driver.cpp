@@ -16,25 +16,34 @@
 
 #include <app_priv.h>
 
-
 using namespace chip::app::Clusters;
 using namespace esp_matter;
 
 static const char *TAG = "app_driver";
 extern uint16_t light_endpoint_id;
 
+#define LED_GPIO_PIN GPIO_NUM_2
+
+static bool is_led_initialized = false;
+
 /* Do any conversions/remapping for the actual value here */
 static esp_err_t app_driver_light_set_on_off(esp_matter_attr_val_t *val)
 {
-    ESP_LOGI(TAG, "Changing the GPIO LED!");
+    if (!is_led_initialized) {
+        ESP_LOGI(TAG, "Initializing the GPIO LED!");
+        esp_rom_gpio_pad_select_gpio(LED_GPIO_PIN);
+        gpio_set_direction(LED_GPIO_PIN, GPIO_MODE_OUTPUT);
+        is_led_initialized = true;
+    }
 
-    esp_rom_gpio_pad_select_gpio(LED);
-    gpio_set_direction(LED, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED,  val->val.b); 
+    ESP_LOGI(TAG, "Changing the GPIO LED to %s", val->val.b ? "ON" : "OFF");
+    esp_err_t err = gpio_set_level(LED_GPIO_PIN, val->val.b); 
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set GPIO level: %s", esp_err_to_name(err));
+    }
 
-    return ESP_OK;
+    return err;
 }
-
 
 esp_err_t app_driver_attribute_update(app_driver_handle_t driver_handle, uint16_t endpoint_id, uint32_t cluster_id,
                                       uint32_t attribute_id, esp_matter_attr_val_t *val)
@@ -55,12 +64,11 @@ esp_err_t app_driver_attribute_update(app_driver_handle_t driver_handle, uint16_
 
 app_driver_handle_t app_driver_light_init()
 {
-    /* Initialize led */
+    /* Initialize LED */
     led_driver_config_t config = led_driver_get_config();
     led_driver_handle_t handle = led_driver_init(&config);
     return (app_driver_handle_t)handle;
 }
-
 
 esp_err_t app_driver_light_set_defaults(uint16_t endpoint_id)
 {
@@ -70,7 +78,6 @@ esp_err_t app_driver_light_set_defaults(uint16_t endpoint_id)
     cluster_t *cluster = NULL;
     attribute_t *attribute = NULL;
     esp_matter_attr_val_t val = esp_matter_invalid(NULL);
-
 
     /* Setting power */
     cluster = cluster::get(endpoint, OnOff::Id);
