@@ -14,7 +14,6 @@
 #include <esp_matter_console.h>
 #include <esp_matter_ota.h>
 
-#include <common_macros.h>
 #include <app_priv.h>
 #include <app_reset.h>
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
@@ -135,9 +134,7 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     esp_err_t err = ESP_OK;
 
     if (type == PRE_UPDATE) {
-        /* Driver update */
-        app_driver_handle_t driver_handle = (app_driver_handle_t)priv_data;
-        err = app_driver_attribute_update(driver_handle, endpoint_id, cluster_id, attribute_id, val);
+        /* Do stuff here */
     }
 
     return err;
@@ -152,45 +149,25 @@ extern "C" void app_main()
 
     /* Initialize driver */
     app_driver_handle_t light_handle = app_driver_light_init();
-    app_driver_handle_t button_handle = app_driver_button_init();
-    app_reset_button_register(button_handle);
-
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
-
-    // node handle can be used to add/modify other endpoints.
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
-    ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
-
-    extended_color_light::config_t light_config;
+    /* Confirm that node and endpoint were created successfully */
+    on_off_light::config_t light_config;
     light_config.on_off.on_off = DEFAULT_POWER;
     light_config.on_off.lighting.start_up_on_off = nullptr;
-    light_config.level_control.current_level = DEFAULT_BRIGHTNESS;
-    light_config.level_control.on_level = DEFAULT_BRIGHTNESS;
-    light_config.level_control.lighting.start_up_current_level = DEFAULT_BRIGHTNESS;
-    light_config.color_control.color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
-    light_config.color_control.enhanced_color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
-    light_config.color_control.color_temperature.startup_color_temperature_mireds = nullptr;
-
-    // endpoint handles can be used to add/modify clusters.
-    endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, light_handle);
-    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create extended color light endpoint"));
-
+    endpoint_t *endpoint = on_off_light::create(node, &light_config, ENDPOINT_FLAG_NONE, light_handle);
+    
+    if (!node || !endpoint) {
+        ESP_LOGE(TAG, "Matter node creation failed");
+    }
+    /* Get Endpoint Id */
     light_endpoint_id = endpoint::get_id(endpoint);
+
     ESP_LOGI(TAG, "Light created with endpoint_id %d", light_endpoint_id);
 
-    /* Mark deferred persistence for some attributes that might be changed rapidly */
-    cluster_t *level_control_cluster = cluster::get(endpoint, LevelControl::Id);
-    attribute_t *current_level_attribute = attribute::get(level_control_cluster, LevelControl::Attributes::CurrentLevel::Id);
-    attribute::set_deferred_persistence(current_level_attribute);
 
-    cluster_t *color_control_cluster = cluster::get(endpoint, ColorControl::Id);
-    attribute_t *current_x_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::CurrentX::Id);
-    attribute::set_deferred_persistence(current_x_attribute);
-    attribute_t *current_y_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::CurrentY::Id);
-    attribute::set_deferred_persistence(current_y_attribute);
-    attribute_t *color_temp_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::ColorTemperatureMireds::Id);
-    attribute::set_deferred_persistence(color_temp_attribute);
+    ESP_LOGI(TAG, "Matter App created with endpoint_id");
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
     /* Set OpenThread platform config */
@@ -204,14 +181,19 @@ extern "C" void app_main()
 
     /* Matter start */
     err = esp_matter::start(app_event_cb);
-    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Matter start failed: %d", err);
+    }
 
     /* Starting driver with default values */
+        /* Starting driver with default values */
     app_driver_light_set_defaults(light_endpoint_id);
 
 #if CONFIG_ENABLE_ENCRYPTED_OTA
     err = esp_matter_ota_requestor_encrypted_init(s_decryption_key, s_decryption_key_len);
-    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to initialized the encrypted OTA, err: %d", err));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialized the encrypted OTA, err: %d", err);
+    }
 #endif // CONFIG_ENABLE_ENCRYPTED_OTA
 
 #if CONFIG_ENABLE_CHIP_SHELL
