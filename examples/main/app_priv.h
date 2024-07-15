@@ -8,16 +8,19 @@
 
 #pragma once
 
+#ifndef APP_PRIV_H
+#define APP_PRIV_H
+
 #include <esp_err.h>
 #include <esp_matter.h>
+#include <driver/gpio.h>
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include "esp_openthread_types.h"
 #endif
 
-/*start of includes for onoff pin for light*/
-#include <driver/gpio.h>
-#define LED        ((gpio_num_t) 4)
+/** GPIO definition for the LED */
+#define LED_GPIO_PIN GPIO_NUM_2
 
 /** Standard max values (used for remapping attributes) */
 #define STANDARD_BRIGHTNESS 100
@@ -62,6 +65,7 @@ app_driver_handle_t app_driver_button_init();
  * This API should be called to update the driver for the attribute being updated.
  * This is usually called from the common `app_attribute_update_cb()`.
  *
+ * @param[in] driver_handle Handle to the driver.
  * @param[in] endpoint_id Endpoint ID of the attribute.
  * @param[in] cluster_id Cluster ID of the attribute.
  * @param[in] attribute_id Attribute ID of the attribute.
@@ -100,3 +104,5 @@ esp_err_t app_driver_light_set_defaults(uint16_t endpoint_id);
         .storage_partition_name = "nvs", .netif_queue_size = 10, .task_queue_size = 10, \
     }
 #endif
+
+#endif // APP_PRIV_H
