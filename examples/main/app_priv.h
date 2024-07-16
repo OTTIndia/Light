@@ -1,72 +1,48 @@
-/*
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
-
-#pragma once
-
-#ifndef APP_PRIV_H
-#define APP_PRIV_H
-
-#include <esp_err.h>
+#include <esp_log.h>
 #include <esp_matter.h>
-#include <driver/gpio.h>
+#include <app_priv.h>
 
-/** GPIO definitions for the LED */
-#define LED_GPIO GPIO_NUM_2
+using namespace esp_matter;
 
-/** Default attribute values used during initialization */
-#define DEFAULT_POWER true
+static const char *TAG = "app_main";
+uint16_t light_endpoint_id;
 
-typedef void *app_driver_handle_t;
+extern "C" void app_main()
+{
+    ESP_LOGI(TAG, "Initializing Matter");
 
-/** Initialize the light driver
- *
- * This initializes the light driver associated with the selected board.
- *
- * @return Handle on success.
- * @return NULL in case of failure.
- */
-app_driver_handle_t app_driver_light_init();
+    /* Initialize the ESP Matter stack */
+    node_t *node = node::get();
+    if (!node) {
+        ESP_LOGE(TAG, "Failed to get node");
+        return;
+    }
 
-/** Initialize the button driver
- *
- * This initializes the button driver associated with the selected board.
- *
- * @return Handle on success.
- * @return NULL in case of failure.
- */
-app_driver_handle_t app_driver_button_init();
+    /* Initialize the light driver */
+    app_driver_light_init();
 
-/** Driver Update
- *
- * This API should be called to update the driver for the attribute being updated.
- * This is usually called from the common `app_attribute_update_cb()`.
- *
- * @param[in] driver_handle Handle to the driver.
- * @param[in] endpoint_id Endpoint ID of the attribute.
- * @param[in] cluster_id Cluster ID of the attribute.
- * @param[in] attribute_id Attribute ID of the attribute.
- * @param[in] val Pointer to `esp_matter_attr_val_t`. Use appropriate elements as per the value type.
- *
- * @return ESP_OK on success.
- * @return error in case of failure.
- */
-esp_err_t app_driver_attribute_update(app_driver_handle_t driver_handle, uint16_t endpoint_id, uint32_t cluster_id,
-                                      uint32_t attribute_id, esp_matter_attr_val_t *val);
+    /* Initialize the light endpoint */
+    endpoint_config_t ep_config;
+    ep_config.device_type_id = 0x0100; // On/Off Light
+    ep_config.device_version = 1;
+    ep_config.endpoint_id = 1;
+    ep_config.device_name = "Light";
+    light_endpoint_id = endpoint::add(node, &ep_config);
 
-/** Set defaults for light driver
- *
- * Set the attribute drivers to their default values from the created data model.
- *
- * @param[in] endpoint_id Endpoint ID of the driver.
- *
- * @return ESP_OK on success.
- * @return error in case of failure.
- */
-esp_err_t app_driver_light_set_defaults(uint16_t endpoint_id);
+    if (!light_endpoint_id) {
+        ESP_LOGE(TAG, "Failed to create light endpoint");
+        return;
+    }
 
-#endif // APP_PRIV_H
+    /* Add On/Off cluster to the light endpoint */
+    cluster_t *cluster = cluster::add(light_endpoint_id, OnOff::Id, OnOff::Attributes::OnOff::Id, NULL);
+    if (!cluster) {
+        ESP_LOGE(TAG, "Failed to add OnOff cluster");
+        return;
+    }
+
+    /* Set default attribute values */
+    app_driver_light_set_defaults(light_endpoint_id);
+
+    ESP_LOGI(TAG, "Matter initialization completed");
+}
